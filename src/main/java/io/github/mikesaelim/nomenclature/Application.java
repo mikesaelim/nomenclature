@@ -1,5 +1,9 @@
 package io.github.mikesaelim.nomenclature;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.TreeMultimap;
+import lombok.Value;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.egit.github.core.RepositoryId;
 import org.eclipse.egit.github.core.Tree;
 import org.eclipse.egit.github.core.TreeEntry;
@@ -7,8 +11,9 @@ import org.eclipse.egit.github.core.service.DataService;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
-import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toSet;
 
 public class Application {
 
@@ -23,21 +28,60 @@ public class Application {
             return;
         }
 
-        List<String> javaClassNames = tree.getTree().stream()
+        TreeMultimap<String, String> javaClassNamesByRoot = extractClassNamesAndCollateByRoot(tree);
+
+        for (String root : javaClassNamesByRoot.keySet()) {
+            System.out.println(root + ":");
+            for (String className : javaClassNamesByRoot.get(root)) {
+                System.out.println("    " + className);
+            }
+        }
+    }
+
+    /**
+     * TODO this method's name is intentionally annoying so that I will refactor this into smaller methods later
+     * @param tree
+     * @return
+     */
+    private static TreeMultimap<String, String> extractClassNamesAndCollateByRoot(Tree tree) {
+        Set<String> classNames = tree.getTree().stream()
                 .filter(t -> TreeEntry.TYPE_BLOB.equals(t.getType()))
                 .filter(t -> t.getPath().endsWith(".java"))
                 .map(t -> t.getPath().substring(t.getPath().lastIndexOf("/") + 1))
-                .map(s -> s.substring(0, s.length() - 5))
-                .filter(s -> !s.endsWith("Test"))
+                .map(s -> s.substring(0, s.length() - 5))  // TODO use more StringUtils stuff
                 .sorted()
-                .collect(toList());
+                .collect(toSet());
 
-        // TODO filter on CamelCase
-        // TODO split into tokens based on CamelCase
-        // TODO filter out one-token names
-        // TODO use last token as key in multimap
+        TreeMultimap<String, String> classNamesByRoot = TreeMultimap.create();
 
-        javaClassNames.forEach(System.out::println);
+        classNames.stream()
+                .filter(StringUtils::isNotBlank)
+                .filter(StringUtils::isAlphanumeric)  // TODO other filters?
+                .map(Application::tokenize)
+                .filter(name -> name.numTokens() >= 2)
+                .filter(name -> !name.getRoot().equals("Test"))
+                .forEach(name -> classNamesByRoot.put(name.getRoot(), name.getClassName()));
+
+        return classNamesByRoot;
+    }
+
+    private static TokenizedClassName tokenize(String className) {
+        return new TokenizedClassName(className,
+                Lists.newArrayList(StringUtils.splitByCharacterTypeCamelCase(className)));
+    }
+
+    @Value
+    private static class TokenizedClassName {
+        String className;
+        List<String> tokens;
+
+        public int numTokens() {
+            return tokens.size();
+        }
+
+        public String getRoot() {
+            return tokens.get(numTokens() - 1);
+        }
     }
 
 }
