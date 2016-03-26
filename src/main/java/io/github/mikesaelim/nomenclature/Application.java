@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Set;
 
 import static java.util.stream.Collectors.toSet;
+import static org.apache.commons.lang3.StringUtils.removeEnd;
+import static org.apache.commons.lang3.StringUtils.substringAfterLast;
 
 public class Application {
 
@@ -31,8 +33,9 @@ public class Application {
         TreeMultimap<String, String> javaClassNamesByRoot = extractClassNamesAndCollateByRoot(tree);
 
         for (String root : javaClassNamesByRoot.keySet()) {
-            System.out.println(root + ":");
-            for (String className : javaClassNamesByRoot.get(root)) {
+            Set<String> classNames = javaClassNamesByRoot.get(root);
+            System.out.println(root + " (" + classNames.size() + "):");
+            for (String className : classNames) {
                 System.out.println("    " + className);
             }
         }
@@ -47,8 +50,8 @@ public class Application {
         Set<String> classNames = tree.getTree().stream()
                 .filter(t -> TreeEntry.TYPE_BLOB.equals(t.getType()))
                 .filter(t -> t.getPath().endsWith(".java"))
-                .map(t -> t.getPath().substring(t.getPath().lastIndexOf("/") + 1))
-                .map(s -> s.substring(0, s.length() - 5))  // TODO use more StringUtils stuff
+                .map(t -> substringAfterLast(t.getPath(), "/"))
+                .map(s -> removeEnd(s, ".java"))
                 .sorted()
                 .collect(toSet());
 
@@ -56,7 +59,7 @@ public class Application {
 
         classNames.stream()
                 .filter(StringUtils::isNotBlank)
-                .filter(StringUtils::isAlphanumeric)  // TODO other filters?
+                .filter(StringUtils::isAlphanumeric)
                 .map(Application::tokenize)
                 .filter(name -> name.numTokens() >= 2)
                 .filter(name -> !name.getRoot().equals("Test"))
