@@ -11,8 +11,11 @@ import org.eclipse.egit.github.core.service.DataService;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
+import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.commons.lang3.StringUtils.removeEnd;
 import static org.apache.commons.lang3.StringUtils.substringAfterLast;
@@ -24,7 +27,7 @@ public class Application {
 
         Tree tree;
         try {
-            tree = dataService.getTree(RepositoryId.create("mikesaelim", "arXivOAIHarvester"), "master", true);
+            tree = dataService.getTree(RepositoryId.create("elastic", "elasticsearch"), "master", true);
         } catch (IOException e) {
             System.out.println(e.getMessage());
             return;
@@ -32,6 +35,8 @@ public class Application {
 
         TreeMultimap<String, String> javaClassNamesByRoot = extractClassNamesAndCollateByRoot(tree);
 
+        System.out.println();
+        System.out.println();
         for (String root : javaClassNamesByRoot.keySet()) {
             Set<String> classNames = javaClassNamesByRoot.get(root);
             System.out.println(root + " (" + classNames.size() + "):");
@@ -39,6 +44,19 @@ public class Application {
                 System.out.println("    " + className);
             }
         }
+
+        Map<String, Integer> multiplicities = javaClassNamesByRoot.keySet().stream()
+                .collect(toMap(Function.<String>identity(), s -> javaClassNamesByRoot.get(s).size()));
+
+        System.out.println();
+        System.out.println();
+        System.out.println("Mult.  Classname");
+        System.out.println("----------------------------------");
+        multiplicities.keySet().stream()
+                .sorted((s1, s2) -> Integer.compare(multiplicities.get(s2), multiplicities.get(s1)))
+                .forEachOrdered(s -> {
+                    System.out.println(StringUtils.leftPad(multiplicities.get(s).toString(), 5) + "  " + s);
+                });
     }
 
     /**
