@@ -14,17 +14,15 @@ import static java.util.stream.Collectors.toMap;
 
 public class Application {
 
-    public static void main(String[] args) {
-        AnalysisService analysisService = new AnalysisService(new DataService());
+    public static void main(String[] args) throws IOException {
+        AnalysisService analysisService = new AnalysisService(new DataService(), new SearchService());
 
-        RepositoryId repositoryId = RepositoryId.create("elastic", "elasticsearch");
+//        RepositoryId repositoryId = RepositoryId.create("elastic", "elasticsearch");
+//        TreeMultimap<String, String> javaClassNamesByRoot = analysisService.parseRepository(repositoryId);
+//        printResults(javaClassNamesByRoot);
 
-        try {
-            TreeMultimap<String, String> javaClassNamesByRoot = analysisService.parseRepository(repositoryId);
-            printResults(javaClassNamesByRoot);
-        } catch (IOException e) {
-            System.out.println(e.getMessage());
-        }
+        Map<String, Integer> multiplicities = analysisService.parseRepositories(5000);
+        printResults(multiplicities);
     }
 
     private static void printResults(TreeMultimap<String, String> javaClassNamesByRoot) {
@@ -41,14 +39,19 @@ public class Application {
         Map<String, Integer> multiplicities = javaClassNamesByRoot.keySet().stream()
                 .collect(toMap(Function.<String>identity(), s -> javaClassNamesByRoot.get(s).size()));
 
+        printResults(multiplicities);
+    }
+
+    private static void printResults(Map<String, Integer> multiplicities) {
         System.out.println();
         System.out.println();
-        System.out.println("Mult.  Classname");
+        System.out.println("Mult.   Classname");
         System.out.println("----------------------------------");
         multiplicities.keySet().stream()
+                .filter(s -> multiplicities.get(s) >= 10)
                 .sorted((s1, s2) -> Integer.compare(multiplicities.get(s2), multiplicities.get(s1)))
                 .forEachOrdered(s -> {
-                    System.out.println(StringUtils.leftPad(multiplicities.get(s).toString(), 5) + "  " + s);
+                    System.out.println(StringUtils.leftPad(multiplicities.get(s).toString(), 6) + "  " + s);
                 });
     }
 

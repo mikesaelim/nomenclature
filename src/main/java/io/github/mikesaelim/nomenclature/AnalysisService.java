@@ -1,31 +1,61 @@
 package io.github.mikesaelim.nomenclature;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.TreeMultimap;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.egit.github.core.RepositoryId;
 import org.eclipse.egit.github.core.Tree;
 import org.eclipse.egit.github.core.TreeEntry;
 import org.eclipse.egit.github.core.service.DataService;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
-import static org.apache.commons.lang3.StringUtils.removeEnd;
-import static org.apache.commons.lang3.StringUtils.substringAfterLast;
+import static org.apache.commons.lang3.StringUtils.*;
 
 class AnalysisService {
 
     private DataService dataService;
+    private SearchService searchService;
 
-    public AnalysisService(DataService dataService) {
+    public AnalysisService(DataService dataService, SearchService searchService) {
         this.dataService = dataService;
+        this.searchService = searchService;
     }
 
-    public TreeMultimap<String, String> parseRepository(RepositoryId repositoryId) throws IOException {
-        Tree tree = dataService.getTree(repositoryId, "master", true);
+    public Map<String, Integer> parseRepositories(Integer minStars) throws IOException {
+        List<Pair<RepositoryId, String>> searchResults = searchService.searchJavaRepositoriesByStars(minStars).stream()
+                .map(rr -> Pair.of(
+                        RepositoryId.create(substringBefore(rr.getFullName(), "/"), substringAfter(rr.getFullName(), "/")),
+                        defaultIfBlank(rr.getDefaultBranch(), "master")
+                        ))
+                .collect(toList());
+
+        System.out.println(searchResults.toString());
+
+        Map<String, Integer> multiplicities = Maps.newHashMap();
+        for (Pair<RepositoryId, String> searchResult : searchResults) {
+            System.out.println("Parsing " + searchResult.getLeft().toString() + " : " + searchResult.getRight() + " ...");
+
+            TreeMultimap<String, String> classNames = parseRepository(searchResult.getLeft(), searchResult.getRight());
+
+            for (String className : classNames.keySet()) {
+                multiplicities.merge(className, classNames.get(className).size(), Integer::sum);
+            }
+        }
+
+        return multiplicities;
+    }
+
+    public TreeMultimap<String, String> parseRepository(RepositoryId repositoryId, String branchName) throws IOException {
+        Tree tree = dataService.getTree(repositoryId, branchName, true);
 
         return extractClassNamesAndCollateByRoot(tree);
     }
@@ -61,6 +91,7 @@ class AnalysisService {
     private static final Function<String, String> toClassName = s -> removeEnd(s, ".java");
 
     private static final Predicate<TokenizedClassName> hasAtLeastTwoTokens = tcn -> tcn.numTokens() >= 2;
-    private static final Predicate<TokenizedClassName> isTestClassName = tcn -> tcn.getRoot().equals("Test");
+    private static final Predicate<TokenizedClassName> isTestClassName =
+            tcn -> tcn.getRoot().equals("Test") || tcn.getRoot().equals("Tests");
 
 }
