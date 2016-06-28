@@ -1,9 +1,8 @@
 package io.github.mikesaelim.nomenclature;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
-import lombok.Value;
 import org.eclipse.egit.github.core.IResourceProvider;
-import org.eclipse.egit.github.core.SearchRepository;
 import org.eclipse.egit.github.core.client.GitHubClient;
 import org.eclipse.egit.github.core.client.PagedRequest;
 import org.eclipse.egit.github.core.service.GitHubService;
@@ -16,11 +15,11 @@ import java.util.List;
  * Executes search queries against the GitHub API.
  *
  * This is necessary because the search capabilities of {@link RepositoryService} are restricted by the legacy search
- * API.
+ * API.  Feelsbadman
  *
- * TODO refactor so that we don't use this stupid Eclipse library at all
+ * TODO refactor so that we don't use this silly Eclipse library at all
  */
-public class SearchService extends GitHubService {
+class SearchService extends GitHubService {
 
     public SearchService() {
         super();
@@ -30,7 +29,19 @@ public class SearchService extends GitHubService {
         super(client);
     }
 
+    /**
+     * Retrieve info on the Java repositories with a minimum number of stars.
+     *
+     * @param minStars minimum number of stars; null is equivalent to 0
+     * @return List of results
+     * @throws IOException if there is a problem connecting, or if the rate limit has been exceeded
+     */
     public List<RepositoryResult> searchJavaRepositoriesByStars(Integer minStars) throws IOException {
+        PagedRequest<RepositoryResult> request = createSearchRequest(minStars);
+        return getAll(request);
+    }
+
+    @VisibleForTesting PagedRequest<RepositoryResult> createSearchRequest(Integer minStars) {
         StringBuilder uriPath = new StringBuilder("/search/repositories?q=language:java");
         if (minStars != null) {
             uriPath.append("+stars:%3E").append(minStars);
@@ -40,7 +51,8 @@ public class SearchService extends GitHubService {
         PagedRequest<RepositoryResult> request = createPagedRequest();
         request.setUri(uriPath);
         request.setType(RepositoryContainer.class);
-        return getAll(request);
+
+        return request;
     }
 
     private static class RepositoryContainer implements

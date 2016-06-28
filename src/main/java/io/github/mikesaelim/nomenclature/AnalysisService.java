@@ -1,5 +1,6 @@
 package io.github.mikesaelim.nomenclature;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.common.collect.TreeMultimap;
 import org.apache.commons.lang3.StringUtils;
@@ -20,6 +21,9 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.commons.lang3.StringUtils.*;
 
+/**
+ * Nomenclature analysis of GitHub Java repositories.
+ */
 class AnalysisService {
 
     private DataService dataService;
@@ -57,21 +61,28 @@ class AnalysisService {
     public TreeMultimap<String, String> parseRepository(RepositoryId repositoryId, String branchName) throws IOException {
         Tree tree = dataService.getTree(repositoryId, branchName, true);
 
-        return extractClassNamesAndCollateByRoot(tree);
+        Set<String> classNames = extractClassNames(tree);
+
+        return collateByRoot(classNames);
     }
 
     /**
-     * TODO this method's name is intentionally annoying so that I will refactor this into smaller methods later
-     * @param tree
-     * @return
+     * Extract Java class names from a GitHub Tree of files.
      */
-    private static TreeMultimap<String, String> extractClassNamesAndCollateByRoot(Tree tree) {
-        Set<String> classNames = tree.getTree().stream()
+    @VisibleForTesting static Set<String> extractClassNames(Tree tree) {
+        return tree.getTree().stream()
                 .filter(isFile).filter(isJava)
                 .map(toFileName).map(toClassName)
-                .sorted()
                 .collect(toSet());
+    }
 
+    /**
+     * For classes with names of the form (prefix)(root), collate the class names by their root.  This also filters out
+     * some special cases, like test classes or implementation classes (so we don't double-count).
+     *
+     * @return TreeMultiMap keyed by root
+     */
+    @VisibleForTesting static TreeMultimap<String, String> collateByRoot(Set<String> classNames) {
         TreeMultimap<String, String> classNamesByRoot = TreeMultimap.create();
 
         classNames.stream()
@@ -80,6 +91,7 @@ class AnalysisService {
                 .map(TokenizedClassName::fromClassName)
                 .filter(hasAtLeastTwoTokens)
                 .filter(isTestClassName.negate())
+                .filter(isImplClassName.negate())
                 .forEach(name -> classNamesByRoot.put(name.getRoot(), name.getClassName()));
 
         return classNamesByRoot;
@@ -87,11 +99,13 @@ class AnalysisService {
 
     private static final Predicate<TreeEntry> isFile = t -> TreeEntry.TYPE_BLOB.equals(t.getType());
     private static final Predicate<TreeEntry> isJava = t -> t.getPath().endsWith(".java");
-    private static final Function<TreeEntry, String> toFileName = t -> substringAfterLast(t.getPath(), "/");
+    private static final Function<TreeEntry, String> toFileName = t ->
+            t.getPath().contains("/") ? substringAfterLast(t.getPath(), "/") : t.getPath();
     private static final Function<String, String> toClassName = s -> removeEnd(s, ".java");
 
     private static final Predicate<TokenizedClassName> hasAtLeastTwoTokens = tcn -> tcn.numTokens() >= 2;
     private static final Predicate<TokenizedClassName> isTestClassName =
             tcn -> tcn.getRoot().equals("Test") || tcn.getRoot().equals("Tests");
+    private static final Predicate<TokenizedClassName> isImplClassName = tcn -> tcn.getRoot().equals("Impl");
 
 }
